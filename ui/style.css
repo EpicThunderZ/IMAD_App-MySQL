@@ -1,0 +1,40 @@
+body {
+    font-family: sans-serif;
+    margin-top: 75px;
+    padding: 100px;
+}
+
+.center {
+    text-align: center;
+}
+
+.text-big {
+    font-size: 300%;
+}
+
+.bold {
+    font-weight: bold;
+}
+
+.img-medium {
+    height: 200px;
+}
+.container {
+                max-width:800px;
+                margin: 0 auto;
+                font-family: sans-serif;
+            }
+/*
+.container h3{
+    color: black;
+}
+
+
+
+body{
+    background-image: url('https://ak6.picdn.net/shutterstock/videos/5498786/thumb/1.jpg?i10c=img');
+}
+#content {
+    color: white;
+}
+*/
