@@ -11,7 +11,7 @@ var pool = mysql.createConnection({
     host: 'localhost',
     database: 'blog_app',
     port: '3306',
-    password: 'youngDB'
+    password: 'secret'
 });
 
 var app = express();
