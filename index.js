@@ -7,11 +7,11 @@ var bodyParser = require('body-parser');
 var session = require('express-session');
 
 var pool = mysql.createConnection({
-    user: 'EpicThunder',
+    user: 'root',
     host: 'localhost',
-    database: 'blog_app',
+    database: 'imad_app',
     port: '3306',
-    password: 'secret'
+    password: 'process.env.DATABASE_PASSWORD'
 });
 
 var app = express();
@@ -31,34 +31,39 @@ function createTemplate (data) {
 var HTMLtemplate=
 `
 <html>
-    <head>
-        <title>
-        ${title}
-
-        </title>
-        <meta name="viewport" content="width=device-width, initial-scale=1"/>
-        <link href="/ui/style.css" rel="stylesheet"/>
-
-    </head>
-    <body>
-        <div class="container">
-        <div>
-           <a href="/">Home</a>
-        </div>
-        <hr/>
-        <h3>
-            ${heading}
-        </h3>
-        <div>
-           ${date.toDateString()}
-        </div>
-        <div>
-            ${content}
-        </div>
-        </div>
-    </body>
-</html>
-`;
+   <head>
+       <title>
+           ${title}
+       </title>
+       <meta name="viewport" content="width=device-width, initial-scale=1" />
+       <link href="/ui/style.css" rel="stylesheet" />
+   </head>
+   <body>
+       <div class="container">
+           <div>
+               <a href="/">Home</a>
+           </div>
+           <hr/>
+           <h3>
+               ${heading}
+           </h3>
+           <div>
+               ${date.toDateString()}
+           </div>
+           <div>
+             ${content}
+           </div>
+           <hr/>
+           <h4>Comments</h4>
+           <div id="comment_form">
+           </div>
+           <div id="comments">
+             <center>Loading comments...</center>
+           </div>
+       </div>
+       <script type="text/javascript" src="/ui/article.js"></script>
+   </body>
+ </html>`;
 return HTMLtemplate;
 }
 
@@ -86,7 +91,7 @@ app.post('/create-user', function(req, res) {
             res.status(500).send(err.toString());
         }
         else {
-            res.send('User successfully created' + username);
+            res.send({});
         }
     });
 });
@@ -96,20 +101,20 @@ app.post('/login', function(req, res) {
     var password = req.body.password;
     pool.query("SELECT * FROM `user` WHERE `username` = '"+req.body.username+"' ", function(err, result, field) {
         if(err) {
-            res.status(500).send(err.toString());
+            res.status(500).send({});
         } else {
             if(result.length === 0) {
-                res.status(400).send('Username/Password is invalid');
+                res.status(500).send(JSON.stringify({ error: "Invalid username/password"}));
             }
             else{
                  var dbString = result[0].password;
                  var salt = dbString.split('$')[2];
                  var hashedPassword = hash(password, salt);
                  if(hashedPassword === dbString) {
-                     req.session.auth = {userId: result[0].username};
-                     res.send('Credentials correct');
+                     req.session.auth = {userId: result[0].id};
+                     res.send(JSON.stringify({ message: "Credentials correct!"}));
                    } else{
-                     res.status(403).send('Username/Password is invalid');
+                     res.status(403).send(JSON.stringify({ error: "Invalid username/password"}));
                    }
                  }
         }
@@ -130,8 +135,62 @@ app.get('/logout', function(req, res) {
     res.send('You have logged out.<br><a href="/">Home</a>');
 });
 
+app.get('/get-articles', function (req, res) {
+   // make a select request
+   // return a response with the results
+   pool.query('SELECT * FROM article', function (err, result) {
+      if (err) {
+          res.status(500).send(err.toString());
+      } else {
+          res.send(JSON.stringify(result));
+      }
+   });
+});
 
-//var pool = new Pool(config);
+app.get('/get-comments/:articleName', function (req, res) {
+   // make a select request
+   // return a response with the results
+   pool.query("SELECT comment.*, user.`username` FROM article, comment, user WHERE article.`title` = ? AND article.`id` = comment.`article_id` AND comment.`user_id` = user.`id` ORDER BY comment.`timestamp` DESC", [req.params.articleName], function (err, result) {
+      if (err) {
+          res.status(500).send(err.toString());
+      } else {
+          res.send(JSON.stringify(result));
+      }
+   });
+});
+
+app.post('/submit-comment/:articleName', function (req, res) {
+   // Check if the user is logged in
+    if (req.session && req.session.auth && req.session.auth.userId) {
+        // First check if the article exists and get the article-id
+        pool.query('SELECT * from article where title = ?', [req.params.articleName], function (err, result) {
+            if (err) {
+                res.status(500).send(err.toString());
+            } else {
+                if (result.length === 0) {
+                    res.status(400).send('Article not found');
+                } else {
+                    var articleId = result[0].id;
+                    // Now insert the right comment for this article
+                    pool.query(
+                        "INSERT INTO comment (comment, article_id, user_id) VALUES (?, ?, ?)",
+                        [req.body.comment, articleId, req.session.auth.userId],
+                        function (err, result) {
+                            if (err) {
+                                res.status(500).send(err.toString());
+                            } else {
+                                res.status(200).send('Comment inserted!')
+                            }
+                        });
+                }
+            }
+       });
+    } else {
+        res.status(403).send('Only logged in users can comment');
+    }
+});
+
+
 app.get('/test-db', function(req,res) {
   var usertest='EpicThunder';
   pool.query("SELECT * FROM `user` WHERE `username`='"+usertest+"'", function (err, result, fields) {
@@ -158,51 +217,6 @@ app.get('/submit-name', function(req,res) {
 
     res.send(JSON.stringify(names));
 });
-
-/*
-app.get('/get-comments/:programName', function (req, res) {
-   // make a select request
-   // return a response with the results
-   pool.query('SELECT comment.*, "user".username FROM article, comment, "user" WHERE article.title = ? AND article.id = comment.article_id AND comment.user_id = "user".id ORDER BY comment.timestamp DESC', req.params.articleName, function (err, result) {
-      if (err) {
-          res.status(500).send(err.toString());
-      } else {
-          res.send(JSON.stringify(result.rows));
-      }
-   });
-});
-
-app.post('/submit-comment/:programName', function (req, res) {
-   // Check if the user is logged in
-    if (req.session && req.session.auth && req.session.auth.userId) {
-        // First check if the article exists and get the article-id
-        pool.query('SELECT * from programs where tag = ?', [req.params.articleName], function (err, result) {
-            if (err) {
-                res.status(500).send(err.toString());
-            } else {
-                if (result.rows.length === 0) {
-                    res.status(400).send('Article not found');
-                } else {
-                    var program = result[0].heading;
-                    // Now insert the right comment for this article
-                    pool.query(
-                        "INSERT INTO ProgComments (comment, program, user) VALUES (?, ?, ?)",
-                        [req.body.comment, articleId, req.session.auth.userId],
-                        function (err, result) {
-                            if (err) {
-                                res.status(500).send(err.toString());
-                            } else {
-                                res.status(200).send('Comment inserted!')
-                            }
-                        });
-                }
-            }
-       });     
-    } else {
-        res.status(403).send('Only logged in users can comment');
-    }
-});
-*/
 
 
 app.get('/articles/:ArticleName',function (req, res) {
@@ -231,6 +245,10 @@ app.get('/ui/main.js', function (req, res) {
   res.sendFile(path.join(__dirname, 'ui', 'main.js'));
 });
 
+app.get('/ui/article.js', function (req, res) {
+  res.sendFile(path.join(__dirname, 'ui', 'article.js'));
+});
+
 app.get('/ui/madi.png', function (req, res) {
   res.sendFile(path.join(__dirname, 'ui', 'madi.png'));
 });
@@ -239,8 +257,12 @@ app.get('/ui/madi.png', function (req, res) {
 // Do not change port, otherwise your app won't run on IMAD servers
 // Use 8080 only for local development if you already have apache running on 80
 pool.connect(function(err) {
-  if (err) throw err;
+  if (err) {
+    console.log("Error in connecting to MySQL Database");
+    console.log(err);
+  } else {
   console.log("Connected!");
+}
 });
 
 var port = 8080;
