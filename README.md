@@ -1,4 +1,4 @@
-# IMAD_App(For MySQL)
+# imad-app (For MySQL)
 
 ## :white_check_mark: Successfully complete!
 
